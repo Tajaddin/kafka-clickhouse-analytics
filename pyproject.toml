@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kafka-clickhouse-analytics"
+version = "0.1.0"
+description = "Real-time analytics: Kafka events -> tumbling-window aggregator -> ClickHouse. Hero: 931K events/sec windowed aggregation in-process, single core."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Tajaddin Gafarov", email = "gafarovtajaddin@gmail.com" }]
+keywords = ["kafka", "clickhouse", "streaming", "analytics", "data-engineering", "windowing", "real-time"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+
+dependencies = [
+    "pydantic>=2.9.0,<3.0.0",
+]
+
+[project.optional-dependencies]
+# The streaming clients are optional so unit tests + the benchmark run with
+# zero native/broker dependencies. Install with .[stream] for the live pipeline.
+stream = [
+    "kafka-python>=2.0.2",
+    "clickhouse-connect>=0.8.0",
+]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-cov>=5.0.0",
+    "ruff>=0.6.0",
+]
+
+[project.scripts]
+rta = "rtanalytics.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: requires Docker (Kafka + ClickHouse via testcontainers)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP"]
+ignore = ["E501"]

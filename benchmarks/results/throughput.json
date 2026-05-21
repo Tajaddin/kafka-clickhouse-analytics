@@ -1,0 +1,9 @@
+{
+  "events": 2000000,
+  "window_ms": 60000,
+  "wall_seconds": 2.1471,
+  "throughput_events_per_sec": 931469,
+  "throughput_millions_per_sec": 0.931,
+  "rollup_rows_emitted": 41699,
+  "ns_per_event": 1073.6
+}
