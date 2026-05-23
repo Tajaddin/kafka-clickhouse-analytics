@@ -46,7 +46,20 @@ Role categories unlocked: **Data Engineer**, Analytics Engineer, streaming/platf
 
 This is the Kafka + ClickHouse cousin of a DuckDB batch ETL: real streaming ingestion, event-time windowing with watermarks and late-event handling, and a columnar OLAP sink. It backs the "real-time data pipeline" resume line with a measured throughput number and a one-command live stack.
 
-## Run the live stack
+## How to run
+
+Prerequisites: Python 3.10+; Docker (only for the live Kafka/ClickHouse/Grafana stack).
+
+```bash
+# unit tests (pure, no infra)
+pip install -e ".[dev]"
+pytest -q
+
+# in-process aggregation benchmark (the 931K events/sec hero)
+python -m benchmarks.throughput --events 2000000
+```
+
+Live stack (Redpanda + ClickHouse + Grafana + consumer):
 
 ```bash
 docker compose up --build
