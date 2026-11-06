@@ -1,8 +1,10 @@
 # Grafana
 
-`docker compose up` provisions a ClickHouse datasource automatically (anonymous
-admin auth, dev only). Open http://localhost:3000 and build a panel over the
-`rollups` table, for example:
+`docker compose up` provisions a ClickHouse datasource automatically. Grafana
+listens on 127.0.0.1 only and has no anonymous access: set
+`GRAFANA_ADMIN_PASSWORD` before `docker compose up`, open
+http://localhost:3000, log in as `admin`, and build a panel over the `rollups`
+table, for example:
 
 ```sql
 SELECT window_start_ms AS t, tenant, sum(count) AS events

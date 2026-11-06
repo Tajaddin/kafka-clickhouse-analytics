@@ -62,8 +62,9 @@ python -m benchmarks.throughput --events 2000000
 Live stack (Redpanda + ClickHouse + Grafana + consumer):
 
 ```bash
+export GRAFANA_ADMIN_PASSWORD='<choose one>'   # required; or set it in a .env file
 docker compose up --build
-# redpanda (Kafka) :9092, clickhouse :8123, grafana :3000, consumer running
+# redpanda (Kafka) :9092, clickhouse :8123, grafana :3000, all on 127.0.0.1; consumer running
 
 # in another shell, produce events:
 pip install -e ".[stream]"
@@ -73,7 +74,7 @@ rta produce --bootstrap localhost:9092 --topic events --count 200000
 curl 'http://localhost:8123/?query=SELECT tenant, sum(count) FROM rollups GROUP BY tenant FORMAT Pretty'
 ```
 
-Grafana at http://localhost:3000 auto-provisions a ClickHouse datasource (see [`grafana/README.md`](grafana/README.md)).
+Grafana at http://localhost:3000 (log in as `admin` with that password; no anonymous access) auto-provisions a ClickHouse datasource (see [`grafana/README.md`](grafana/README.md)).
 
 ## The windowing model
 
