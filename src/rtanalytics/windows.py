@@ -119,6 +119,14 @@ class TumblingWindowAggregator:
         self._min_open_end = new_min
         return closed
 
+    def resume_after(self, window_end_ms: int) -> None:
+        """Treat every window ending at or before `window_end_ms` as closed.
+
+        Used on restart, so re-read events of windows the sink already holds
+        are dropped as late instead of re-emitted as partial rows.
+        """
+        self._watermark = max(self._watermark, window_end_ms + self.allowed_lateness_ms)
+
     def flush(self) -> list[RollupRow]:
         """Close and emit all remaining open windows. Call at end of stream."""
         rows = [

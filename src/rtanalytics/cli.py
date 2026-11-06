@@ -20,7 +20,7 @@ def _cmd_produce(args: argparse.Namespace) -> int:
 
 
 def _cmd_consume(args: argparse.Namespace) -> int:
-    from rtanalytics.consumer import make_consumer, run_pipeline
+    from rtanalytics.consumer import consume, kafka_commit, make_consumer
     from rtanalytics.sink_clickhouse import ClickHouseSink
     from rtanalytics.windows import TumblingWindowAggregator
 
@@ -29,7 +29,7 @@ def _cmd_consume(args: argparse.Namespace) -> int:
     consumer = make_consumer(args.bootstrap, args.topic)
     agg = TumblingWindowAggregator(window_ms=args.window_ms)
 
-    written = run_pipeline((m.value for m in consumer), agg, sink)
+    written = consume(consumer, agg, sink, kafka_commit(consumer, args.topic))
     print(f"wrote {written} rollup rows to ClickHouse")
     return 0
 

@@ -8,7 +8,7 @@ table, for example:
 
 ```sql
 SELECT window_start_ms AS t, tenant, sum(count) AS events
-FROM rollups
+FROM rollups FINAL
 GROUP BY t, tenant
 ORDER BY t
 ```

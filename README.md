@@ -37,8 +37,8 @@ events --> Kafka topic --> consumer --> TumblingWindowAggregator --> ClickHouse 
 | `windows.py` | Tumbling-window aggregator. Watermark-driven close + eviction bounds memory on an unbounded stream. Pure Python, the hot path. |
 | `events.py` | Event schema + deterministic generator (clickstream-style: tenant, kind, amount). |
 | `producer.py` | Kafka producer (kafka-python, lazy import). |
-| `consumer.py` | Provider-agnostic consume loop: any event-dict iterable -> aggregator -> sink. |
-| `sink_clickhouse.py` | ClickHouse `MergeTree` sink ordered by `(window_start, tenant, kind)`, the natural time-series layout. |
+| `consumer.py` | Consume loop: Kafka messages -> aggregator -> sink, committing offsets only once the events they cover are in ClickHouse. `run_pipeline` is the provider-agnostic variant for any event-dict iterable. |
+| `sink_clickhouse.py` | ClickHouse `ReplacingMergeTree` sink ordered by `(window_start, tenant, kind)`, the natural time-series layout; one row per window after merge. |
 
 ## Why this matters for hiring
 
@@ -71,7 +71,7 @@ pip install -e ".[stream]"
 rta produce --bootstrap localhost:9092 --topic events --count 200000
 
 # query the rollups:
-curl 'http://localhost:8123/?query=SELECT tenant, sum(count) FROM rollups GROUP BY tenant FORMAT Pretty'
+curl 'http://localhost:8123/?query=SELECT tenant, sum(count) FROM rollups FINAL GROUP BY tenant FORMAT Pretty'
 ```
 
 Grafana at http://localhost:3000 (log in as `admin` with that password; no anonymous access) auto-provisions a ClickHouse datasource (see [`grafana/README.md`](grafana/README.md)).
@@ -82,12 +82,14 @@ Grafana at http://localhost:3000 (log in as `admin` with that password; no anony
 - **Watermark**: the max event time seen. A window `[start, end)` closes once `watermark >= end + allowed_lateness`.
 - **Late events**: an event for an already-closed window is dropped and counted (`dropped_late`), never silently merged.
 - **Memory**: closed windows are evicted on close, so a multi-day stream holds only the currently-open windows in memory.
+- **Delivery**: auto-commit is off. After each ClickHouse write the consumer commits offsets up to the earliest event still in an open window, so a crash re-reads everything ClickHouse does not have yet. On start it resumes after the latest window already in ClickHouse, so re-read events of written windows are dropped rather than re-emitted as partial rows. Net effect: each window is written once, with every event. Assumes one consumer per topic.
+- **Querying**: `rollups` is a `ReplacingMergeTree`, so a window that is ever written twice collapses to one row on merge; use `FINAL` to collapse at read time.
 
 ## Testing
 
 ```bash
 pip install -e ".[dev]"
-pytest                       # 19 unit tests + 1 integration (auto-skips without Docker)
+pytest                       # 24 unit tests + 1 integration (auto-skips without Docker)
 pytest -m "not integration"  # unit only (what CI gates on)
 ```
 
@@ -95,9 +97,10 @@ pytest -m "not integration"  # unit only (what CI gates on)
 - **test_events.py**: schema round trip, type coercion, generator bounds + determinism.
 - **test_pipeline.py**: sink record shape, ensure-schema, write/empty, full `run_pipeline` with fakes.
 - **test_producer.py**: producer send/flush/determinism with a fake broker.
+- **test_delivery.py**: `rta consume` against in-memory Kafka and ClickHouse fakes. Kills the consumer mid-stream and between a ClickHouse write and its offset commit, restarts it, and asserts the rows match an uninterrupted run exactly: nothing lost, nothing written twice. Also checks the committed offsets stop at the earliest event in an open window.
 - **test_integration.py**: real Kafka + ClickHouse via testcontainers; asserts 2000 produced events sum back to 2000 rollup count. Skips automatically without Docker.
 
-Coverage 73% (excludes the live integration path, which needs Docker).
+Coverage 93% (excludes the live integration path, which needs Docker).
 
 ## Integration test
 
@@ -110,8 +113,8 @@ src/rtanalytics/
   events.py            # schema + generator
   windows.py           # tumbling-window aggregator (the hot path)
   producer.py          # Kafka producer (lazy import)
-  consumer.py          # consume loop (provider-agnostic)
-  sink_clickhouse.py   # ClickHouse MergeTree sink
+  consumer.py          # consume loop + offset commits
+  sink_clickhouse.py   # ClickHouse ReplacingMergeTree sink
   cli.py               # `rta produce` / `rta consume`
 benchmarks/throughput.py  # in-process events/sec hero
 grafana/                  # auto-provisioned ClickHouse datasource
