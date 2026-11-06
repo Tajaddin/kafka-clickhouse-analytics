@@ -60,7 +60,8 @@ def test_kafka_to_clickhouse_roundtrip():
         sink.ensure_schema()
 
         consumer = make_consumer(bootstrap, "events", group_id="it")
-        agg = TumblingWindowAggregator(window_ms=1000, allowed_lateness_ms=0)
+        # Events carry up to 10s of jitter; 10s of lateness keeps every one.
+        agg = TumblingWindowAggregator(window_ms=1000, allowed_lateness_ms=10_000)
         written = consume(consumer, agg, sink, kafka_commit(consumer, "events"))
         # consume() leaves the windows the watermark has not closed; close them.
         written += sink.write(agg.flush())
