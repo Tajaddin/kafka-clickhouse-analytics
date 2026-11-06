@@ -41,6 +41,9 @@ class FakeBroker:
         self.crash_at: int | None = None
         self.crash_on_commit: int | None = None
 
+    def append(self, events: list[dict]) -> None:
+        self.log.extend(json.dumps(e).encode() for e in events)
+
     def kafka_module(self) -> ModuleType:
         broker = self
 
@@ -154,5 +157,21 @@ def test_commits_stop_at_the_earliest_event_in_an_open_window():
     consume(stream, agg, sink, commits.append, flush_every=3)
 
     # After the third event only [0, 1000) is in the sink; [1000, 2000) still
-    # holds offset 0 of partition 1 and offset 1 of partition 0.
-    assert commits == [{0: 1, 1: 0}, {0: 2, 1: 1}]
+    # holds offset 0 of partition 1 and offset 1 of partition 0, and stays
+    # open when the stream ends.
+    assert commits == [{0: 1, 1: 0}, {0: 1, 1: 0}]
+
+
+def test_restart_after_the_stream_goes_idle_keeps_every_event(monkeypatch):
+    def event(t: int) -> dict:
+        return {"event_time_ms": t, "tenant": "acme", "kind": "view", "amount": 1.0}
+
+    base = 1_700_000_000_000
+    broker, clickhouse = FakeBroker([event(base + 100)] * 50), FakeClickHouse()
+    _consume(monkeypatch, broker, clickhouse)  # exits idle while [base, base+1s) is open
+
+    # More events for that window, then one 7s later that closes it.
+    broker.append([event(base + 200)] * 50 + [event(base + 7000)])
+    _consume(monkeypatch, broker, clickhouse)
+    assert [row[:5] for row in clickhouse.rows] == [(base, base + 1000, "acme", "view", 100)]
+    assert broker.committed == 100  # the last event's window is still open

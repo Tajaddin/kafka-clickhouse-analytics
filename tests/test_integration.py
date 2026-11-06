@@ -62,6 +62,8 @@ def test_kafka_to_clickhouse_roundtrip():
         consumer = make_consumer(bootstrap, "events", group_id="it")
         agg = TumblingWindowAggregator(window_ms=1000, allowed_lateness_ms=0)
         written = consume(consumer, agg, sink, kafka_commit(consumer, "events"))
+        # consume() leaves the windows the watermark has not closed; close them.
+        written += sink.write(agg.flush())
         assert written > 0
 
         total = client.query("SELECT sum(count) FROM rollups FINAL").result_rows[0][0]

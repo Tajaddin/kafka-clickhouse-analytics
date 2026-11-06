@@ -54,12 +54,14 @@ def consume(
     """At-least-once consume loop that never writes a window twice.
 
     ``messages`` yields records with ``.partition``, ``.offset`` and ``.value``
-    (an event dict). After each sink write, ``commit`` receives
+    (an event dict). A window is written only once the watermark closes it.
+    After each sink write, and when ``messages`` ends, ``commit`` receives
     ``{partition: next_offset}`` that stops at the earliest event still held in
-    an open window, so after a crash every event the sink lacks is read again.
-    On start the aggregator resumes after the last window the sink holds, so
-    re-read events of windows already written are dropped as late instead of
-    being re-emitted as partial rows. Assumes one consumer per topic.
+    an open window. Windows still open at the end are not written: the next
+    run, or the run after a crash, reads their events again. On start the
+    aggregator resumes after the last window the sink holds, so re-read events
+    of windows already written are dropped as late instead of being re-emitted
+    as partial rows. Assumes one consumer per topic.
     Returns total rollup rows written.
     """
     resume = sink.max_window_end()
@@ -95,7 +97,6 @@ def consume(
         if seen % flush_every == 0 and pending:
             write_and_commit()
 
-    pending.extend(aggregator.flush())
     if next_offsets:
         write_and_commit()
     return written

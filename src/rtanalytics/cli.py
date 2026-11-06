@@ -30,7 +30,7 @@ def _cmd_consume(args: argparse.Namespace) -> int:
     agg = TumblingWindowAggregator(window_ms=args.window_ms)
 
     written = consume(consumer, agg, sink, kafka_commit(consumer, args.topic))
-    print(f"wrote {written} rollup rows to ClickHouse")
+    print(f"wrote {written} rollup rows to ClickHouse; dropped {agg.dropped_late} late events")
     return 0
 
 
