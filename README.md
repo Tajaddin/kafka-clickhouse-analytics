@@ -84,14 +84,14 @@ Grafana at http://localhost:3000 (log in as `admin` with that password; no anony
 - **Watermark**: the max event time seen. A window `[start, end)` closes once `watermark >= end + allowed_lateness`.
 - **Late events**: an event for an already-closed window is dropped and counted (`dropped_late`), never silently merged.
 - **Memory**: closed windows are evicted on close, so a multi-day stream holds only the currently-open windows in memory.
-- **Delivery**: auto-commit is off, and a window is written only once the watermark closes it. After each ClickHouse write, and when the consumer stops, it commits offsets up to the earliest event still in an open window, so a crash or a restart re-reads everything ClickHouse does not have yet. `rta consume` stops after 10 s without messages and leaves the windows still open to its next run. On start it resumes after the latest window already in ClickHouse, so re-read events of written windows are dropped rather than re-emitted as partial rows. Net effect: each window is written once, with every event that was not late (`rta consume` prints how many were dropped as late). Assumes one consumer per topic.
+- **Delivery**: auto-commit is off, and a window is written only once the watermark closes it. After each ClickHouse write, and when the consumer stops, it commits offsets up to the earliest event still in an open window, so a crash or a restart re-reads everything ClickHouse does not have yet. `rta consume` stops after 10 s without messages and leaves the windows still open to its next run. On start it resumes after the latest window already in ClickHouse, so re-read events of written windows are dropped rather than re-emitted as partial rows. Net effect: each window is written once, with every event that was not late (`rta consume` prints how many were dropped as late). The watermark is global, so which events are late depends on how the partitions interleave, and a restart can change that interleaving. Assumes one consumer per topic.
 - **Querying**: `rollups` is a `ReplacingMergeTree`, so a window that is ever written twice collapses to one row on merge; use `FINAL` to collapse at read time.
 
 ## Testing
 
 ```bash
 pip install -e ".[dev]"
-pytest                       # 25 unit tests + 1 integration (auto-skips without Docker)
+pytest                       # 29 unit tests + 1 integration (auto-skips without Docker)
 pytest -m "not integration"  # unit only (what CI gates on)
 ```
 
@@ -99,7 +99,7 @@ pytest -m "not integration"  # unit only (what CI gates on)
 - **test_events.py**: schema round trip, type coercion, generator bounds + determinism.
 - **test_pipeline.py**: sink record shape, ensure-schema, write/empty, full `run_pipeline` with fakes.
 - **test_producer.py**: producer send/flush/determinism with a fake broker.
-- **test_delivery.py**: `rta consume` against in-memory Kafka and ClickHouse fakes. Kills the consumer mid-stream and between a ClickHouse write and its offset commit, restarts it, and asserts the rows match an uninterrupted run exactly: nothing lost, nothing written twice. Also checks that a window still open when the consumer stops is written on a later run with every event, and that the committed offsets stop at the earliest event in an open window.
+- **test_delivery.py**: `rta consume` against in-memory Kafka and ClickHouse fakes. Kills the consumer mid-stream and between a ClickHouse write and its offset commit, restarts it, and asserts the rows and committed offsets match an uninterrupted run exactly: nothing lost, nothing written twice. Runs on one partition with out-of-order events, and on two partitions with in-order events: a restart reads the two partitions in a different interleaving, which with out-of-order events changes which events are late. Also checks that a window still open when the consumer stops is written on a later run with every event, and that the committed offsets stop at the earliest event in an open window.
 - **test_integration.py**: real Kafka + ClickHouse via testcontainers; asserts 2000 produced events sum back to 2000 rollup count. Skips automatically without Docker.
 
 Coverage 93% (excludes the live integration path, which needs Docker).
