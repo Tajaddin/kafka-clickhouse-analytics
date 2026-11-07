@@ -30,7 +30,7 @@ dependencies = [
 # The streaming clients are optional so unit tests + the benchmark run with
 # zero native/broker dependencies. Install with .[stream] for the live pipeline.
 stream = [
-    "kafka-python>=2.0.2",
+    "kafka-python>=2.1.0",
     "clickhouse-connect>=0.8.0",
 ]
 dev = [

@@ -3,9 +3,10 @@
 clickhouse-connect is imported lazily so the unit tests and benchmark do not
 require it. Install the package via the .[stream] extra to use this.
 
-The target table is a MergeTree keyed by (window_start_ms, tenant, kind),
-which is the natural sort order for time-series rollups and makes range scans
-over a tenant's recent windows cheap.
+The target table is a ReplacingMergeTree keyed by (window_start_ms, tenant,
+kind), which is the natural sort order for time-series rollups and makes range
+scans over a tenant's recent windows cheap. A window written twice collapses
+to one row when parts merge; query with FINAL to collapse before that.
 """
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ CREATE TABLE IF NOT EXISTS rollups (
     sum             Float64,
     min             Float64,
     max             Float64
-) ENGINE = MergeTree
+) ENGINE = ReplacingMergeTree
 ORDER BY (window_start_ms, tenant, kind)
 """.strip()
 
@@ -67,3 +68,8 @@ class ClickHouseSink:
             return 0
         self._client.insert("rollups", records, column_names=_COLUMNS)
         return len(records)
+
+    def max_window_end(self) -> int | None:
+        """End of the latest window in the table, or None if it is empty."""
+        result = self._client.query("SELECT maxOrNull(window_end_ms) FROM rollups")
+        return result.result_rows[0][0]

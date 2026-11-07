@@ -8,7 +8,9 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY src ./src
 COPY README.md ./
-RUN pip install --no-cache-dir ".[stream]"
+RUN pip install --no-cache-dir ".[stream]" \
+    && useradd --create-home --uid 10001 app
+USER app
 
 # Default: run the consumer (override the command to `produce`).
 ENTRYPOINT ["rta"]

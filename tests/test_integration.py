@@ -32,7 +32,7 @@ if not _docker_available():
 from testcontainers.clickhouse import ClickHouseContainer  # noqa: E402
 from testcontainers.kafka import KafkaContainer  # noqa: E402
 
-from rtanalytics.consumer import make_consumer, run_pipeline  # noqa: E402
+from rtanalytics.consumer import consume, kafka_commit, make_consumer  # noqa: E402
 from rtanalytics.producer import make_producer, produce_events  # noqa: E402
 from rtanalytics.sink_clickhouse import ClickHouseSink  # noqa: E402
 from rtanalytics.windows import TumblingWindowAggregator  # noqa: E402
@@ -60,9 +60,12 @@ def test_kafka_to_clickhouse_roundtrip():
         sink.ensure_schema()
 
         consumer = make_consumer(bootstrap, "events", group_id="it")
-        agg = TumblingWindowAggregator(window_ms=1000, allowed_lateness_ms=0)
-        written = run_pipeline((m.value for m in consumer), agg, sink)
+        # Events carry up to 10s of jitter; 10s of lateness keeps every one.
+        agg = TumblingWindowAggregator(window_ms=1000, allowed_lateness_ms=10_000)
+        written = consume(consumer, agg, sink, kafka_commit(consumer, "events"))
+        # consume() leaves the windows the watermark has not closed; close them.
+        written += sink.write(agg.flush())
         assert written > 0
 
-        total = client.query("SELECT sum(count) FROM rollups").result_rows[0][0]
+        total = client.query("SELECT sum(count) FROM rollups FINAL").result_rows[0][0]
         assert total == 2000
